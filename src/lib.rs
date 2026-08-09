@@ -164,7 +164,8 @@ impl Terminal {
     }
 
     pub fn clear(&mut self) {
-        self.cells.fill(self.blank_cell());
+        let blank = self.blank_cell();
+        self.cells.fill(blank);
         self.cursor = Cursor { row: 0, col: 0 };
     }
 
@@ -295,14 +296,16 @@ impl Terminal {
 
     fn clear_line(&mut self) {
         let row_start = self.cursor.row * self.width;
-        self.cells[row_start..row_start + self.width].fill(self.blank_cell());
+        let blank = self.blank_cell();
+        self.cells[row_start..row_start + self.width].fill(blank);
         self.cursor.col = 0;
     }
 
     fn clear_line_from_cursor(&mut self) {
         if let Some(start) = self.index(self.cursor.row, self.cursor.col) {
             let row_end = (self.cursor.row + 1) * self.width;
-            self.cells[start..row_end].fill(self.blank_cell());
+            let blank = self.blank_cell();
+            self.cells[start..row_end].fill(blank);
         }
     }
 
@@ -322,7 +325,8 @@ impl Terminal {
         }
 
         let last_row_start = (self.height - 1) * self.width;
-        self.cells[last_row_start..].fill(self.blank_cell());
+        let blank = self.blank_cell();
+        self.cells[last_row_start..].fill(blank);
         self.cursor.row = self.height - 1;
     }
 
