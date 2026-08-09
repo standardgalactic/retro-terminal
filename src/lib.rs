@@ -444,7 +444,11 @@ fn parse_csi_params(params: &str) -> Vec<usize> {
 }
 
 fn first_or_default(params: &[usize], default: usize) -> usize {
-    params.first().copied().filter(|value| *value != 0).unwrap_or(default)
+    params
+        .first()
+        .copied()
+        .filter(|value| *value != 0)
+        .unwrap_or(default)
 }
 
 fn ansi_basic_color(index: usize, bright: bool) -> Color {
@@ -485,7 +489,10 @@ mod tests {
     fn wraps_text_to_next_line() {
         let mut terminal = Terminal::new(4, 2);
         terminal.write_text("HELLO");
-        assert_eq!(terminal.lines(), vec!["HELL".to_string(), "O   ".to_string()]);
+        assert_eq!(
+            terminal.lines(),
+            vec!["HELL".to_string(), "O   ".to_string()]
+        );
     }
 
     #[test]
@@ -511,7 +518,10 @@ mod tests {
         terminal.feed("ABCD");
         terminal.feed("E");
         terminal.feed("\x08\x08");
-        assert_eq!(terminal.lines(), vec!["ABC ".to_string(), "    ".to_string()]);
+        assert_eq!(
+            terminal.lines(),
+            vec!["ABC ".to_string(), "    ".to_string()]
+        );
         assert_eq!(terminal.cursor(), Cursor { row: 0, col: 3 });
     }
 
@@ -529,12 +539,18 @@ mod tests {
         terminal.execute(TerminalCommand::MoveTo { row: 1, col: 0 });
         terminal.execute(TerminalCommand::MoveRight(2));
         terminal.execute(TerminalCommand::Text("Z".to_string()));
-        assert_eq!(terminal.lines(), vec!["abcdef".to_string(), "  Z   ".to_string()]);
+        assert_eq!(
+            terminal.lines(),
+            vec!["abcdef".to_string(), "  Z   ".to_string()]
+        );
 
         terminal.execute(TerminalCommand::MoveUp(1));
         terminal.execute(TerminalCommand::MoveLeft(1));
         terminal.execute(TerminalCommand::Text("Q".to_string()));
-        assert_eq!(terminal.lines(), vec!["abQdef".to_string(), "  Z   ".to_string()]);
+        assert_eq!(
+            terminal.lines(),
+            vec!["abQdef".to_string(), "  Z   ".to_string()]
+        );
     }
 
     #[test]
@@ -542,7 +558,10 @@ mod tests {
         let mut terminal = Terminal::new(5, 2);
         terminal.feed("hello\nworld");
         terminal.execute(TerminalCommand::ClearLine);
-        assert_eq!(terminal.lines(), vec!["hello".to_string(), "     ".to_string()]);
+        assert_eq!(
+            terminal.lines(),
+            vec!["hello".to_string(), "     ".to_string()]
+        );
         assert_eq!(terminal.cursor(), Cursor { row: 1, col: 0 });
     }
 
@@ -552,18 +571,30 @@ mod tests {
         terminal.feed("hello");
         terminal.feed("\x1b[2D");
         terminal.feed("X");
-        assert_eq!(terminal.lines(), vec!["helXo   ".to_string(), "        ".to_string()]);
+        assert_eq!(
+            terminal.lines(),
+            vec!["helXo   ".to_string(), "        ".to_string()]
+        );
 
         terminal.feed("\x1b[2;3H");
         terminal.feed("Z");
-        assert_eq!(terminal.lines(), vec!["helXo   ".to_string(), "  Z     ".to_string()]);
+        assert_eq!(
+            terminal.lines(),
+            vec!["helXo   ".to_string(), "  Z     ".to_string()]
+        );
 
         terminal.feed("\x1b[2K");
-        assert_eq!(terminal.lines(), vec!["helXo   ".to_string(), "        ".to_string()]);
+        assert_eq!(
+            terminal.lines(),
+            vec!["helXo   ".to_string(), "        ".to_string()]
+        );
 
         terminal.feed("abc");
         terminal.feed("\x1b[2J");
-        assert_eq!(terminal.lines(), vec!["        ".to_string(), "        ".to_string()]);
+        assert_eq!(
+            terminal.lines(),
+            vec!["        ".to_string(), "        ".to_string()]
+        );
         assert_eq!(terminal.cursor(), Cursor { row: 0, col: 0 });
     }
 
@@ -573,10 +604,16 @@ mod tests {
         terminal.execute(TerminalCommand::Text("ABCD".to_string()));
         terminal.execute(TerminalCommand::MoveTo { row: 1, col: 1 });
         terminal.execute(TerminalCommand::Text("Z".to_string()));
-        assert_eq!(terminal.lines(), vec!["ABCD".to_string(), " Z  ".to_string()]);
+        assert_eq!(
+            terminal.lines(),
+            vec!["ABCD".to_string(), " Z  ".to_string()]
+        );
 
         terminal.execute(TerminalCommand::Clear);
-        assert_eq!(terminal.lines(), vec!["    ".to_string(), "    ".to_string()]);
+        assert_eq!(
+            terminal.lines(),
+            vec!["    ".to_string(), "    ".to_string()]
+        );
         assert_eq!(terminal.cursor(), Cursor { row: 0, col: 0 });
     }
 
