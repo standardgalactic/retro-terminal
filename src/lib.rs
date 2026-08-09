@@ -14,17 +14,87 @@ pub enum TerminalCommand {
     MoveDown(usize),
     MoveLeft(usize),
     MoveRight(usize),
+    SetTheme(ThemePreset),
 }
 
 /// A single terminal cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell {
     pub ch: char,
+    pub style: TextStyle,
+}
+
+/// Supported terminal color values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Color {
+    Black,
+    Red,
+    Green,
+    Yellow,
+    Blue,
+    Magenta,
+    Cyan,
+    White,
+    BrightBlack,
+    BrightRed,
+    BrightGreen,
+    BrightYellow,
+    BrightBlue,
+    BrightMagenta,
+    BrightCyan,
+    BrightWhite,
+}
+
+/// Style metadata associated with rendered text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextStyle {
+    pub foreground: Color,
+    pub background: Color,
+    pub intense: bool,
+}
+
+impl TextStyle {
+    fn from_theme(theme: ThemePreset) -> Self {
+        theme.default_style()
+    }
+}
+
+/// Visual preset inspired by historical terminal defaults.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemePreset {
+    Amber,
+    Green,
+    IbmDos,
+}
+
+impl ThemePreset {
+    fn default_style(self) -> TextStyle {
+        match self {
+            ThemePreset::Amber => TextStyle {
+                foreground: Color::Yellow,
+                background: Color::Black,
+                intense: true,
+            },
+            ThemePreset::Green => TextStyle {
+                foreground: Color::Green,
+                background: Color::Black,
+                intense: true,
+            },
+            ThemePreset::IbmDos => TextStyle {
+                foreground: Color::BrightWhite,
+                background: Color::Blue,
+                intense: false,
+            },
+        }
+    }
 }
 
 impl Default for Cell {
     fn default() -> Self {
-        Self { ch: ' ' }
+        Self {
+            ch: ' ',
+            style: ThemePreset::Green.default_style(),
+        }
     }
 }
 
@@ -42,18 +112,33 @@ pub struct Terminal {
     height: usize,
     cells: Vec<Cell>,
     cursor: Cursor,
+    theme: ThemePreset,
+    current_style: TextStyle,
 }
 
 impl Terminal {
     pub fn new(width: usize, height: usize) -> Self {
+        Self::new_with_theme(width, height, ThemePreset::Green)
+    }
+
+    pub fn new_with_theme(width: usize, height: usize, theme: ThemePreset) -> Self {
         assert!(width > 0, "terminal width must be greater than zero");
         assert!(height > 0, "terminal height must be greater than zero");
+        let default_style = theme.default_style();
 
         Self {
             width,
             height,
-            cells: vec![Cell::default(); width * height],
+            cells: vec![
+                Cell {
+                    ch: ' ',
+                    style: default_style,
+                };
+                width * height
+            ],
             cursor: Cursor { row: 0, col: 0 },
+            theme,
+            current_style: TextStyle::from_theme(theme),
         }
     }
 
@@ -65,8 +150,21 @@ impl Terminal {
         self.cursor
     }
 
+    pub fn theme(&self) -> ThemePreset {
+        self.theme
+    }
+
+    pub fn current_style(&self) -> TextStyle {
+        self.current_style
+    }
+
+    pub fn set_theme(&mut self, theme: ThemePreset) {
+        self.theme = theme;
+        self.current_style = theme.default_style();
+    }
+
     pub fn clear(&mut self) {
-        self.cells.fill(Cell::default());
+        self.cells.fill(self.blank_cell());
         self.cursor = Cursor { row: 0, col: 0 };
     }
 
@@ -83,6 +181,7 @@ impl Terminal {
             TerminalCommand::MoveDown(amount) => self.move_down(amount),
             TerminalCommand::MoveLeft(amount) => self.move_left(amount),
             TerminalCommand::MoveRight(amount) => self.move_right(amount),
+            TerminalCommand::SetTheme(theme) => self.set_theme(theme),
         }
     }
 
@@ -141,7 +240,10 @@ impl Terminal {
         }
 
         if let Some(idx) = self.index(self.cursor.row, self.cursor.col) {
-            self.cells[idx].ch = ch;
+            self.cells[idx] = Cell {
+                ch,
+                style: self.current_style,
+            };
             self.cursor.col += 1;
         }
     }
@@ -166,7 +268,7 @@ impl Terminal {
         }
 
         if let Some(idx) = self.index(self.cursor.row, self.cursor.col) {
-            self.cells[idx] = Cell::default();
+            self.cells[idx] = self.blank_cell();
         }
     }
 
@@ -193,14 +295,14 @@ impl Terminal {
 
     fn clear_line(&mut self) {
         let row_start = self.cursor.row * self.width;
-        self.cells[row_start..row_start + self.width].fill(Cell::default());
+        self.cells[row_start..row_start + self.width].fill(self.blank_cell());
         self.cursor.col = 0;
     }
 
     fn clear_line_from_cursor(&mut self) {
         if let Some(start) = self.index(self.cursor.row, self.cursor.col) {
             let row_end = (self.cursor.row + 1) * self.width;
-            self.cells[start..row_end].fill(Cell::default());
+            self.cells[start..row_end].fill(self.blank_cell());
         }
     }
 
@@ -220,7 +322,7 @@ impl Terminal {
         }
 
         let last_row_start = (self.height - 1) * self.width;
-        self.cells[last_row_start..].fill(Cell::default());
+        self.cells[last_row_start..].fill(self.blank_cell());
         self.cursor.row = self.height - 1;
     }
 
@@ -285,7 +387,37 @@ impl Terminal {
                     self.clear_line_from_cursor();
                 }
             }
+            'm' => self.apply_sgr(params),
             _ => {}
+        }
+    }
+
+    fn apply_sgr(&mut self, params: &[usize]) {
+        if params.is_empty() {
+            self.current_style = self.theme.default_style();
+            return;
+        }
+
+        for param in params {
+            match *param {
+                0 => self.current_style = self.theme.default_style(),
+                1 => self.current_style.intense = true,
+                22 => self.current_style.intense = false,
+                30..=37 => self.current_style.foreground = ansi_basic_color(*param - 30, false),
+                39 => self.current_style.foreground = self.theme.default_style().foreground,
+                40..=47 => self.current_style.background = ansi_basic_color(*param - 40, false),
+                49 => self.current_style.background = self.theme.default_style().background,
+                90..=97 => self.current_style.foreground = ansi_basic_color(*param - 90, true),
+                100..=107 => self.current_style.background = ansi_basic_color(*param - 100, true),
+                _ => {}
+            }
+        }
+    }
+
+    fn blank_cell(&self) -> Cell {
+        Cell {
+            ch: ' ',
+            style: self.theme.default_style(),
         }
     }
 }
@@ -309,6 +441,27 @@ fn parse_csi_params(params: &str) -> Vec<usize> {
 
 fn first_or_default(params: &[usize], default: usize) -> usize {
     params.first().copied().filter(|value| *value != 0).unwrap_or(default)
+}
+
+fn ansi_basic_color(index: usize, bright: bool) -> Color {
+    match (index, bright) {
+        (0, false) => Color::Black,
+        (1, false) => Color::Red,
+        (2, false) => Color::Green,
+        (3, false) => Color::Yellow,
+        (4, false) => Color::Blue,
+        (5, false) => Color::Magenta,
+        (6, false) => Color::Cyan,
+        (7, false) => Color::White,
+        (0, true) => Color::BrightBlack,
+        (1, true) => Color::BrightRed,
+        (2, true) => Color::BrightGreen,
+        (3, true) => Color::BrightYellow,
+        (4, true) => Color::BrightBlue,
+        (5, true) => Color::BrightMagenta,
+        (6, true) => Color::BrightCyan,
+        _ => Color::BrightWhite,
+    }
 }
 
 pub fn version() -> &'static str {
@@ -421,5 +574,43 @@ mod tests {
         terminal.execute(TerminalCommand::Clear);
         assert_eq!(terminal.lines(), vec!["    ".to_string(), "    ".to_string()]);
         assert_eq!(terminal.cursor(), Cursor { row: 0, col: 0 });
+    }
+
+    #[test]
+    fn supports_theme_presets() {
+        let mut terminal = Terminal::new_with_theme(2, 1, ThemePreset::Amber);
+        terminal.feed("A");
+        let amber_cell = terminal.cell(0, 0).expect("cell present");
+        assert_eq!(amber_cell.style.foreground, Color::Yellow);
+        assert_eq!(amber_cell.style.background, Color::Black);
+        assert!(amber_cell.style.intense);
+
+        terminal.execute(TerminalCommand::SetTheme(ThemePreset::IbmDos));
+        terminal.feed("B");
+        let ibm_cell = terminal.cell(0, 1).expect("cell present");
+        assert_eq!(ibm_cell.style.foreground, Color::BrightWhite);
+        assert_eq!(ibm_cell.style.background, Color::Blue);
+        assert!(!ibm_cell.style.intense);
+    }
+
+    #[test]
+    fn parses_sgr_color_and_reset_sequences() {
+        let mut terminal = Terminal::new(4, 1);
+        terminal.feed("\x1b[31mR\x1b[44mB\x1b[0mN");
+
+        let red = terminal.cell(0, 0).expect("cell present");
+        assert_eq!(red.ch, 'R');
+        assert_eq!(red.style.foreground, Color::Red);
+        assert_eq!(red.style.background, Color::Black);
+
+        let blue_bg = terminal.cell(0, 1).expect("cell present");
+        assert_eq!(blue_bg.ch, 'B');
+        assert_eq!(blue_bg.style.foreground, Color::Red);
+        assert_eq!(blue_bg.style.background, Color::Blue);
+
+        let reset = terminal.cell(0, 2).expect("cell present");
+        assert_eq!(reset.ch, 'N');
+        assert_eq!(reset.style.foreground, Color::Green);
+        assert_eq!(reset.style.background, Color::Black);
     }
 }
