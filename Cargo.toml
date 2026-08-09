@@ -1,8 +1,11 @@
 [package]
 name = "retro_terminal"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 description = "Recreation of historical terminal interfaces, text consoles, and command-line interaction throughout the history of computing."
 license = "MIT"
+homepage = "https://github.com/standardgalactic/retro-terminal"
+repository = "https://github.com/standardgalactic/retro-terminal"
+documentation = "https://github.com/standardgalactic/retro-terminal#readme"
 
 [dependencies]

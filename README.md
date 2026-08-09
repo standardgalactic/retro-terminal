@@ -1,6 +1,10 @@
 # Retro Terminal
 
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/standardgalactic/retro-terminal/releases)
+
 Recreation of historical terminal interfaces, text consoles, and command-line interaction throughout the history of computing.
+
+Current version: `0.1.0`
 
 ## Overview
 
@@ -27,3 +31,34 @@ This repository uses a standard make interface:
 - make docs
 - make format
 - make release
+
+## Running the interactive terminal demo
+
+Run directly with Cargo:
+
+```bash
+cargo run
+```
+
+Or use the management script:
+
+```bash
+./scripts/manage.sh run
+```
+
+## Management script
+
+The `scripts/manage.sh` helper wraps common development and release tasks:
+
+- `./scripts/manage.sh clean` — remove build artifacts
+- `./scripts/manage.sh build` — compile debug binary
+- `./scripts/manage.sh run` — run the interactive terminal demo
+- `./scripts/manage.sh release` — build optimized binary
+- `./scripts/manage.sh version` — display current package version
+- `./scripts/manage.sh bump` — bump patch version (`0.1.0 -> 0.1.1`)
+- `./scripts/manage.sh minor` — bump minor version (`0.1.0 -> 0.2.0`)
+- `./scripts/manage.sh major` — bump major version (`0.1.0 -> 1.0.0`)
+- `./scripts/manage.sh lint` — run `make lint`
+- `./scripts/manage.sh test` — run `make test`
+- `./scripts/manage.sh format` — run `make format`
+- `./scripts/manage.sh docs` — run `make docs`
