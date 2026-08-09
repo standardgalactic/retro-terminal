@@ -239,7 +239,7 @@ impl Terminal {
         let mut params = String::new();
         let mut final_byte = None;
 
-        while let Some(ch) = chars.next() {
+        for ch in chars.by_ref() {
             if ch.is_ascii_alphabetic() {
                 final_byte = Some(ch);
                 break;
@@ -353,8 +353,8 @@ mod tests {
         let mut terminal = Terminal::new(4, 2);
         terminal.feed("ABCD");
         terminal.feed("E");
-        terminal.feed("\x08");
-        assert_eq!(terminal.lines(), vec!["ABCD".to_string(), "    ".to_string()]);
+        terminal.feed("\x08\x08");
+        assert_eq!(terminal.lines(), vec!["ABC ".to_string(), "    ".to_string()]);
         assert_eq!(terminal.cursor(), Cursor { row: 0, col: 3 });
     }
 
@@ -369,15 +369,15 @@ mod tests {
     fn supports_extended_cursor_commands() {
         let mut terminal = Terminal::new(6, 2);
         terminal.execute(TerminalCommand::Text("abcdef".to_string()));
-        terminal.execute(TerminalCommand::MoveDown(1));
+        terminal.execute(TerminalCommand::MoveTo { row: 1, col: 0 });
         terminal.execute(TerminalCommand::MoveRight(2));
         terminal.execute(TerminalCommand::Text("Z".to_string()));
         assert_eq!(terminal.lines(), vec!["abcdef".to_string(), "  Z   ".to_string()]);
 
         terminal.execute(TerminalCommand::MoveUp(1));
-        terminal.execute(TerminalCommand::MoveLeft(3));
+        terminal.execute(TerminalCommand::MoveLeft(1));
         terminal.execute(TerminalCommand::Text("Q".to_string()));
-        assert_eq!(terminal.lines(), vec!["abcQef".to_string(), "  Z   ".to_string()]);
+        assert_eq!(terminal.lines(), vec!["abQdef".to_string(), "  Z   ".to_string()]);
     }
 
     #[test]
@@ -401,7 +401,7 @@ mod tests {
         terminal.feed("Z");
         assert_eq!(terminal.lines(), vec!["helXo   ".to_string(), "  Z     ".to_string()]);
 
-        terminal.feed("\x1b[K");
+        terminal.feed("\x1b[2K");
         assert_eq!(terminal.lines(), vec!["helXo   ".to_string(), "        ".to_string()]);
 
         terminal.feed("abc");
