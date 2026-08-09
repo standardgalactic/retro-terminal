@@ -10,9 +10,10 @@ Retro Terminal explores historical command-line environments as software archaeo
 
 - Fixed-size screen buffer with row/column cursor tracking.
 - Printable text rendering with line wrapping and vertical scrolling.
-- Basic control handling: newline, carriage return, backspace, and clear screen.
-- Command execution API for deterministic terminal state transitions.
-- Unit tests for wrapping, scrolling, cursor movement, and control behavior.
+- Control handling: newline, carriage return, tab expansion, cross-line backspace, and clear screen.
+- Command execution API for deterministic terminal state transitions including absolute/relative cursor movement and line clearing.
+- ANSI CSI support for common cursor movement and clear operations.
+- Unit tests for wrapping, scrolling, cursor movement, control behavior, and ANSI parsing.
 
 ## Development
 

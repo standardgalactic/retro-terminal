@@ -8,7 +8,12 @@ pub enum TerminalCommand {
     CarriageReturn,
     Backspace,
     Clear,
+    ClearLine,
     MoveTo { row: usize, col: usize },
+    MoveUp(usize),
+    MoveDown(usize),
+    MoveLeft(usize),
+    MoveRight(usize),
 }
 
 /// A single terminal cell.
@@ -72,12 +77,24 @@ impl Terminal {
             TerminalCommand::CarriageReturn => self.cursor.col = 0,
             TerminalCommand::Backspace => self.backspace(),
             TerminalCommand::Clear => self.clear(),
+            TerminalCommand::ClearLine => self.clear_line(),
             TerminalCommand::MoveTo { row, col } => self.move_to(row, col),
+            TerminalCommand::MoveUp(amount) => self.move_up(amount),
+            TerminalCommand::MoveDown(amount) => self.move_down(amount),
+            TerminalCommand::MoveLeft(amount) => self.move_left(amount),
+            TerminalCommand::MoveRight(amount) => self.move_right(amount),
         }
     }
 
     pub fn feed(&mut self, input: &str) {
-        for ch in input.chars() {
+        let mut chars = input.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch == '\x1b' && matches!(chars.peek(), Some('[')) {
+                chars.next();
+                self.consume_csi(&mut chars);
+                continue;
+            }
+
             self.write_char(ch);
         }
     }
@@ -112,6 +129,7 @@ impl Terminal {
             '\r' => self.cursor.col = 0,
             '\x08' => self.backspace(),
             '\x0c' => self.clear(),
+            '\t' => self.tab(),
             _ if ch.is_control() => {}
             _ => self.put_printable(ch),
         }
@@ -140,15 +158,57 @@ impl Terminal {
     fn backspace(&mut self) {
         if self.cursor.col > 0 {
             self.cursor.col -= 1;
-            if let Some(idx) = self.index(self.cursor.row, self.cursor.col) {
-                self.cells[idx] = Cell::default();
-            }
+        } else if self.cursor.row > 0 {
+            self.cursor.row -= 1;
+            self.cursor.col = self.width - 1;
+        } else {
+            return;
+        }
+
+        if let Some(idx) = self.index(self.cursor.row, self.cursor.col) {
+            self.cells[idx] = Cell::default();
         }
     }
 
     fn move_to(&mut self, row: usize, col: usize) {
         self.cursor.row = row.min(self.height - 1);
         self.cursor.col = col.min(self.width - 1);
+    }
+
+    fn move_up(&mut self, amount: usize) {
+        self.cursor.row = self.cursor.row.saturating_sub(amount);
+    }
+
+    fn move_down(&mut self, amount: usize) {
+        self.cursor.row = self.cursor.row.saturating_add(amount).min(self.height - 1);
+    }
+
+    fn move_left(&mut self, amount: usize) {
+        self.cursor.col = self.cursor.col.saturating_sub(amount);
+    }
+
+    fn move_right(&mut self, amount: usize) {
+        self.cursor.col = self.cursor.col.saturating_add(amount).min(self.width - 1);
+    }
+
+    fn clear_line(&mut self) {
+        let row_start = self.cursor.row * self.width;
+        self.cells[row_start..row_start + self.width].fill(Cell::default());
+        self.cursor.col = 0;
+    }
+
+    fn clear_line_from_cursor(&mut self) {
+        if let Some(start) = self.index(self.cursor.row, self.cursor.col) {
+            let row_end = (self.cursor.row + 1) * self.width;
+            self.cells[start..row_end].fill(Cell::default());
+        }
+    }
+
+    fn tab(&mut self) {
+        let spaces = 8 - (self.cursor.col % 8);
+        for _ in 0..spaces {
+            self.put_printable(' ');
+        }
     }
 
     fn scroll_up(&mut self) {
@@ -171,6 +231,84 @@ impl Terminal {
             None
         }
     }
+
+    fn consume_csi<I>(&mut self, chars: &mut std::iter::Peekable<I>)
+    where
+        I: Iterator<Item = char>,
+    {
+        let mut params = String::new();
+        let mut final_byte = None;
+
+        while let Some(ch) = chars.next() {
+            if ch.is_ascii_alphabetic() {
+                final_byte = Some(ch);
+                break;
+            }
+
+            if ch.is_ascii_digit() || ch == ';' {
+                params.push(ch);
+            } else {
+                return;
+            }
+        }
+
+        let Some(final_byte) = final_byte else {
+            return;
+        };
+
+        let parsed_params = parse_csi_params(&params);
+        self.apply_csi(final_byte, &parsed_params);
+    }
+
+    fn apply_csi(&mut self, final_byte: char, params: &[usize]) {
+        match final_byte {
+            'A' => self.move_up(first_or_default(params, 1)),
+            'B' => self.move_down(first_or_default(params, 1)),
+            'C' => self.move_right(first_or_default(params, 1)),
+            'D' => self.move_left(first_or_default(params, 1)),
+            'H' | 'f' => {
+                let row = first_or_default(params, 1).saturating_sub(1);
+                let col = params.get(1).copied().unwrap_or(1).saturating_sub(1);
+                self.move_to(row, col);
+            }
+            'J' => {
+                let mode = first_or_default(params, 0);
+                if mode == 2 || mode == 3 {
+                    self.clear();
+                }
+            }
+            'K' => {
+                let mode = first_or_default(params, 0);
+                if mode == 2 {
+                    self.clear_line();
+                } else {
+                    self.clear_line_from_cursor();
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn parse_csi_params(params: &str) -> Vec<usize> {
+    if params.is_empty() {
+        return vec![];
+    }
+
+    params
+        .split(';')
+        .map(|part| {
+            if part.is_empty() {
+                0
+            } else {
+                part.parse::<usize>().unwrap_or(0)
+            }
+        })
+        .collect()
+}
+
+fn first_or_default(params: &[usize], default: usize) -> usize {
+    params.first().copied().filter(|value| *value != 0).unwrap_or(default)
 }
 
 pub fn version() -> &'static str {
@@ -208,6 +346,68 @@ mod tests {
 
         terminal.feed("\x08!");
         assert_eq!(terminal.lines(), vec!["!ello".to_string()]);
+    }
+
+    #[test]
+    fn backspace_crosses_lines() {
+        let mut terminal = Terminal::new(4, 2);
+        terminal.feed("ABCD");
+        terminal.feed("E");
+        terminal.feed("\x08");
+        assert_eq!(terminal.lines(), vec!["ABCD".to_string(), "    ".to_string()]);
+        assert_eq!(terminal.cursor(), Cursor { row: 0, col: 3 });
+    }
+
+    #[test]
+    fn tab_expands_to_next_tab_stop() {
+        let mut terminal = Terminal::new(10, 1);
+        terminal.feed("A\tB");
+        assert_eq!(terminal.lines(), vec!["A       B ".to_string()]);
+    }
+
+    #[test]
+    fn supports_extended_cursor_commands() {
+        let mut terminal = Terminal::new(6, 2);
+        terminal.execute(TerminalCommand::Text("abcdef".to_string()));
+        terminal.execute(TerminalCommand::MoveDown(1));
+        terminal.execute(TerminalCommand::MoveRight(2));
+        terminal.execute(TerminalCommand::Text("Z".to_string()));
+        assert_eq!(terminal.lines(), vec!["abcdef".to_string(), "  Z   ".to_string()]);
+
+        terminal.execute(TerminalCommand::MoveUp(1));
+        terminal.execute(TerminalCommand::MoveLeft(3));
+        terminal.execute(TerminalCommand::Text("Q".to_string()));
+        assert_eq!(terminal.lines(), vec!["abcQef".to_string(), "  Z   ".to_string()]);
+    }
+
+    #[test]
+    fn supports_clear_line_command() {
+        let mut terminal = Terminal::new(5, 2);
+        terminal.feed("hello\nworld");
+        terminal.execute(TerminalCommand::ClearLine);
+        assert_eq!(terminal.lines(), vec!["hello".to_string(), "     ".to_string()]);
+        assert_eq!(terminal.cursor(), Cursor { row: 1, col: 0 });
+    }
+
+    #[test]
+    fn parses_basic_ansi_csi_sequences() {
+        let mut terminal = Terminal::new(8, 2);
+        terminal.feed("hello");
+        terminal.feed("\x1b[2D");
+        terminal.feed("X");
+        assert_eq!(terminal.lines(), vec!["helXo   ".to_string(), "        ".to_string()]);
+
+        terminal.feed("\x1b[2;3H");
+        terminal.feed("Z");
+        assert_eq!(terminal.lines(), vec!["helXo   ".to_string(), "  Z     ".to_string()]);
+
+        terminal.feed("\x1b[K");
+        assert_eq!(terminal.lines(), vec!["helXo   ".to_string(), "        ".to_string()]);
+
+        terminal.feed("abc");
+        terminal.feed("\x1b[2J");
+        assert_eq!(terminal.lines(), vec!["        ".to_string(), "        ".to_string()]);
+        assert_eq!(terminal.cursor(), Cursor { row: 0, col: 0 });
     }
 
     #[test]
