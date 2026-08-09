@@ -16,4 +16,5 @@ jobs:
         run: |
           make init
           make lint
+          bash tests/scripts/test_manage.sh
           make test

@@ -62,3 +62,9 @@ The `scripts/manage.sh` helper wraps common development and release tasks:
 - `./scripts/manage.sh test` — run `make test`
 - `./scripts/manage.sh format` — run `make format`
 - `./scripts/manage.sh docs` — run `make docs`
+
+Run the management script smoke test with:
+
+```bash
+bash tests/scripts/test_manage.sh
+```
